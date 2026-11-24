@@ -225,7 +225,23 @@ section[data-testid="stSidebar"] .stButton>button{width:100%;background:rgba(255
 .login-t{font-size:1.8rem;font-weight:800;color:var(--navy);margin:34px 0 2px}
 .login-s{color:var(--muted);margin-bottom:16px}
 
+.st-key-topbar,.st-key-loginbar{margin-bottom:10px}
+.st-key-topbar{background:#fff;border:1px solid var(--line);border-radius:18px;padding:8px 14px;box-shadow:0 8px 22px rgba(10,95,208,.08)}
+.st-key-topbar div[data-testid="stHorizontalBlock"],.st-key-loginbar div[data-testid="stHorizontalBlock"]{flex-direction:row !important;flex-wrap:nowrap !important;align-items:center;gap:.5rem}
+.st-key-topbar div[data-testid="stColumn"],.st-key-loginbar div[data-testid="stColumn"]{min-width:0 !important}
+.st-key-topbar .logo-card{background:transparent;box-shadow:none;padding:0;border-radius:0}
+.st-key-topbar .logo-card img{height:40px}
+.st-key-topbar .stButton>button,.st-key-loginbar .stButton>button{width:100%;padding:.45rem .5rem;font-size:.85rem;white-space:nowrap}
+.st-key-nav div[role="radiogroup"]{flex-direction:row !important;flex-wrap:nowrap !important;overflow-x:auto;gap:8px;padding:4px 2px 12px;scrollbar-width:none}
+.st-key-nav div[role="radiogroup"]::-webkit-scrollbar{display:none}
+.st-key-nav label[data-baseweb="radio"]{flex:0 0 auto;padding:9px 18px;border-radius:999px;background:#fff;border:1px solid var(--line);box-shadow:0 4px 12px rgba(10,95,208,.07);cursor:pointer}
+.st-key-nav label[data-baseweb="radio"]>div:first-child{display:none}
+.st-key-nav label[data-baseweb="radio"] p{white-space:nowrap;font-weight:700;color:var(--navy)}
+.st-key-nav label[data-baseweb="radio"]:has(input:checked){background:linear-gradient(135deg,#2B8CFF,#0A5FD0);border-color:transparent;box-shadow:0 8px 18px rgba(10,95,208,.3)}
+.st-key-nav label[data-baseweb="radio"]:has(input:checked) p{color:#fff !important;font-weight:800}
+
 @media(max-width:640px){
+.block-container{padding-left:.9rem;padding-right:.9rem}
 .hero{flex-direction:column;align-items:flex-start;padding:20px}
 .hero-title{font-size:1.45rem}.hero-chip{text-align:left}
 .login-hero{min-height:360px;padding:24px}.login-hero .logo-card img{height:84px}
@@ -392,9 +408,18 @@ def recon_df(d1, d2, rep=None):
 
 
 # --------------------------------------------------------------------- login
-def lang_switch(collapsed=True):
-    st.radio(T("language"), ["አማርኛ", "English"], key="lang", horizontal=True,
-             label_visibility="collapsed" if collapsed else "visible")
+def toggle_lang():
+    st.session_state["lang"] = "English" if st.session_state.get("lang") == "አማርኛ" else "አማርኛ"
+
+
+def lang_button(key):
+    label = "English" if st.session_state.get("lang") == "አማርኛ" else "አማርኛ"
+    st.button(label, key=key, on_click=toggle_lang)
+
+
+def do_logout():
+    st.session_state.pop("user", None)
+    st.session_state.pop("nav_choice", None)
 
 
 def login_screen():
@@ -404,6 +429,10 @@ def login_screen():
         '<div class="bub" style="width:36px;height:36px;right:12%;top:46%;animation-delay:-6s"></div>'
         '<div class="bub" style="width:100px;height:100px;left:-30px;bottom:-30px;animation-delay:-2s"></div>'
     )
+    with st.container(key="loginbar"):
+        _, lc = st.columns([3, 1], vertical_alignment="center")
+        with lc:
+            lang_button("lang_login")
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         st.markdown(
@@ -413,7 +442,6 @@ def login_screen():
             unsafe_allow_html=True,
         )
     with right:
-        lang_switch()
         st.markdown('<div class="login-t">' + T("login") + '</div><div class="login-s">' + T("login_sub") + "</div>",
                     unsafe_allow_html=True)
         with st.form("login"):
@@ -734,26 +762,20 @@ def main():
     st.markdown("<style>" + CSS + "</style>", unsafe_allow_html=True)
     user = st.session_state.get("user")
     if not user:
-        st.markdown("<style>section[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],"
-                    "[data-testid='collapsedControl']{display:none}</style>", unsafe_allow_html=True)
         login_screen()
         return
 
-    lang = 1 if st.session_state.get("lang") == "አማርኛ" else 0
-    with st.sidebar:
-        st.markdown(logo_html() + '<div class="co-s">' + CO_EN + "</div>", unsafe_allow_html=True)
-        st.markdown(
-            '<div class="uchip"><div class="av">' + esc(user["name"][:1].upper()) + "</div><div>"
-            '<div class="un">' + esc(user["name"]) + '</div><div class="ur">' + ROLE_LBL[user["role"]][lang] + "</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        pages = PAGES[user["role"]]
-        choice = st.radio(T("nav"), [k for k, _ in pages], format_func=T, label_visibility="collapsed")
-        st.markdown("<br>", unsafe_allow_html=True)
-        lang_switch()
-        if st.button(T("logout")):
-            st.session_state.pop("user")
-            st.rerun()
+    pages = PAGES[user["role"]]
+    with st.container(key="topbar"):
+        c1, c2, c3 = st.columns([3, 2, 2], vertical_alignment="center")
+        c1.markdown(logo_html(), unsafe_allow_html=True)
+        with c2:
+            lang_button("lang_top")
+        with c3:
+            st.button(T("logout"), key="logout_btn", on_click=do_logout)
+    with st.container(key="nav"):
+        choice = st.radio(T("nav"), [k for k, _ in pages], format_func=T, horizontal=True,
+                          label_visibility="collapsed", key="nav_choice")
 
     hero(user, T(choice))
     dict(pages)[choice](user)
