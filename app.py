@@ -16,9 +16,26 @@ import pandas as pd
 import streamlit as st
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO = os.path.join(APP_DIR, "logo.png")
+
+
+def find_logo():
+    """logo.png, or any image in the app folder with 'logo' (or 'mella') in its name."""
+    exact = os.path.join(APP_DIR, "logo.png")
+    if os.path.exists(exact):
+        return exact
+    try:
+        for fn in sorted(os.listdir(APP_DIR)):
+            low = fn.lower()
+            if low.endswith((".png", ".jpg", ".jpeg", ".webp")) and ("logo" in low or "mella" in low):
+                return os.path.join(APP_DIR, fn)
+    except OSError:
+        pass
+    return ""
+
+
+LOGO = find_logo()
 DB = os.environ.get("SALES_DB", os.path.join(APP_DIR, "sales_tracker.db"))
-BANKS = ["CBE", "Awash", "Abyssinia", "Dashen", "CBO", "United", "Nib", "Abay", "Wegagen", "Other"]
+BANKS = ["Hibret", "Wegagen", "Coop", "CBE", "Awash", "Dashen", "Abyssinia", "Other"]
 PRODUCTS = ["Big", "Small"]
 ROLES = ["rep", "factory", "finance", "executive"]
 CO_EN = "MELLA SOAP AND DETERGENT MANUFACTURING"
@@ -32,7 +49,7 @@ ROLE_LBL = {
 
 try:
     from PIL import Image
-    _icon = Image.open(LOGO) if os.path.exists(LOGO) else None
+    _icon = Image.open(LOGO) if LOGO else None
 except Exception:
     _icon = None
 st.set_page_config(page_title="MELLA Sales", page_icon=_icon, layout="wide")
@@ -76,6 +93,7 @@ TXT = {
     "qty": ("Quantity", "ብዛት"),
     "price": ("Unit price", "የአንዱ ዋጋ"),
     "bank": ("Bank", "ባንክ"),
+    "bank_other": ("If Other, write bank name", "ሌላ ከሆነ የባንኩን ስም ይጻፉ"),
     "paid_for": ("Deposited for / by", "ለማን / ማን አስገባ"),
     "amount": ("Amount", "መጠን"),
     "payments": ("Payments / bank deposits", "ክፍያዎች / የባንክ ገቢዎች"),
@@ -218,10 +236,18 @@ section[data-testid="stSidebar"] .stButton>button{width:100%;background:rgba(255
 
 @st.cache_data
 def logo_b64():
+    """Logo as base64 PNG, shrunk to a web-friendly size."""
+    if not LOGO:
+        return ""
     try:
-        with open(LOGO, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    except OSError:
+        import io
+        from PIL import Image
+        im = Image.open(LOGO).convert("RGBA")
+        im.thumbnail((520, 520))
+        buf = io.BytesIO()
+        im.save(buf, format="PNG", optimize=True)
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception:
         return ""
 
 
@@ -445,16 +471,24 @@ def page_entry(user):
     # ---- payments
     sec(T("payments"))
     p_old = q("SELECT bank, paid_for, amount FROM payments WHERE d=? AND rep=? ORDER BY id", (d, rep))
+    p_old["bank_other"] = ""
+    custom = ~p_old["bank"].isin(BANKS)
+    p_old.loc[custom, "bank_other"] = p_old.loc[custom, "bank"]
+    p_old.loc[custom, "bank"] = "Other"
+    p_old = p_old[["bank", "bank_other", "paid_for", "amount"]]
     p_ed = st.data_editor(
         p_old, num_rows="dynamic", use_container_width=True, key=f"pay{d}",
         column_config={
             "bank": st.column_config.SelectboxColumn(T("bank"), options=BANKS, required=True),
+            "bank_other": st.column_config.TextColumn(T("bank_other")),
             "paid_for": st.column_config.TextColumn(T("paid_for")),
             "amount": st.column_config.NumberColumn(T("amount"), min_value=0, step=1000, required=True),
         },
     )
     p_ed = p_ed.dropna(subset=["bank", "amount"]).copy()
     p_ed["paid_for"] = p_ed["paid_for"].fillna("").astype(str)
+    p_ed["bank_other"] = p_ed["bank_other"].fillna("").astype(str).str.strip()
+    p_ed["bank_final"] = [o if (b == "Other" and o) else b for b, o in zip(p_ed["bank"], p_ed["bank_other"])]
     pay_total = float(p_ed.amount.sum())
 
     # ---- balance
@@ -477,7 +511,7 @@ def page_entry(user):
                           [(d, rep, r["product"], r["note"], int(r["qty"]), float(r["price"])) for _, r in s_ed.iterrows()])
             c.execute("DELETE FROM payments WHERE d=? AND rep=?", (d, rep))
             c.executemany("INSERT INTO payments(d,rep,bank,paid_for,amount) VALUES(?,?,?,?,?)",
-                          [(d, rep, r["bank"], r["paid_for"], float(r["amount"])) for _, r in p_ed.iterrows()])
+                          [(d, rep, r["bank_final"], r["paid_for"], float(r["amount"])) for _, r in p_ed.iterrows()])
         st.success(T("saved"))
 
 
