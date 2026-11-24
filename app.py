@@ -237,8 +237,13 @@ def page_entry(user):
     rb = c1.number_input(T("big"), 0, step=10, value=int(old.big[0]) if not old.empty else 0, key=f"rb{d}")
     rs = c2.number_input(T("small"), 0, step=10, value=int(old.small[0]) if not old.empty else 0, key=f"rs{d}")
     if not disp.empty or rb or rs:
-        st.success(T("match")) if (rb == sb and rs == ss) else st.warning(
-            f"{T('mismatch')}: {T('big')} {rb - sb:+d}, {T('small')} {rs - ss:+d}")
+        diff_b = int(rb) - int(sb)
+        diff_s = int(rs) - int(ss)
+        if diff_b == 0 and diff_s == 0:
+            st.success(T("match"))
+        else:
+            msg = T("mismatch") + ": " + T("big") + " " + str(diff_b) + ", " + T("small") + " " + str(diff_s)
+            st.warning(msg)
 
     st.subheader(T("sales"))
     st.caption(T("sales_hint"))
